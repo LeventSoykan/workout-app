@@ -3,7 +3,9 @@ name: Build Workout APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - master
+      - main
 
 jobs:
   build:
