@@ -8,8 +8,11 @@ import android.app.Service;
 import android.content.Intent;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
+import android.media.audiofx.LoudnessEnhancer;
 import android.net.Uri;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 
 public class WorkoutService extends Service {
     public static final String ACTION_PLAY = "com.levent.workout.PLAY";
@@ -24,9 +27,25 @@ public class WorkoutService extends Service {
     private static final String CHANNEL_ID = "workout_playback";
     private static final int NOTIFICATION_ID = 10;
     private static final int SEEK_AMOUNT_MS = 15_000;
+    // +6 dB voice boost. LoudnessEnhancer uses millibels (600 mB = 6 dB).
+    private static final int VOICE_BOOST_MB = 600;
 
     private MediaPlayer player;
+    private LoudnessEnhancer loudnessEnhancer;
     private Uri currentUri;
+    private final Handler stateHandler = new Handler(Looper.getMainLooper());
+
+    // Keep the UI-visible playback position current while audio is running.
+    // Previously positionState only changed when a playback command was received.
+    private final Runnable stateTicker = new Runnable() {
+        @Override
+        public void run() {
+            updateState();
+            if (player != null && preparedState) {
+                stateHandler.postDelayed(this, 250);
+            }
+        }
+    };
 
     private static volatile boolean preparedState = false;
     private static volatile boolean playingState = false;
@@ -102,8 +121,16 @@ public class WorkoutService extends Service {
             player.setOnPreparedListener(mp -> {
                 preparedState = true;
                 durationState = mp.getDuration();
+                try {
+                    loudnessEnhancer = new LoudnessEnhancer(mp.getAudioSessionId());
+                    loudnessEnhancer.setTargetGain(VOICE_BOOST_MB);
+                    loudnessEnhancer.setEnabled(true);
+                } catch (RuntimeException ignored) {
+                    // Playback still works if a device does not support LoudnessEnhancer.
+                }
                 mp.start();
                 playingState = true;
+                startStateTicker();
                 updateState();
                 updateNotification();
             });
@@ -148,6 +175,11 @@ public class WorkoutService extends Service {
         positionState = target;
         durationState = duration;
         updateNotification();
+    }
+
+    private void startStateTicker() {
+        stateHandler.removeCallbacks(stateTicker);
+        stateHandler.post(stateTicker);
     }
 
     private void updateState() {
@@ -205,6 +237,11 @@ public class WorkoutService extends Service {
     }
 
     private void stopPlayerOnly() {
+        stateHandler.removeCallbacks(stateTicker);
+        if (loudnessEnhancer != null) {
+            try { loudnessEnhancer.release(); } catch (Exception ignored) { }
+            loudnessEnhancer = null;
+        }
         if (player != null) {
             try { player.stop(); } catch (Exception ignored) { }
             player.release();

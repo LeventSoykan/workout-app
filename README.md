@@ -26,3 +26,8 @@ After installation, open SoundAssistant > Multi sound and enable the `Workout` a
 5. Extract `app-debug.apk` and install it on the phone.
 
 The package/application ID is unchanged (`com.levent.workout`), so the new APK should install as an update over the previous debug build when built by GitHub Actions with the same standard debug signing setup. Your previously selected MP3 should remain saved.
+
+## v1.2
+- Playback position now refreshes continuously while the workout is playing.
+- Adds a +6 dB speech-oriented loudness boost so workout instructions sit above simultaneous media more clearly.
+- GitHub Actions runs on both `master` and `main`.
